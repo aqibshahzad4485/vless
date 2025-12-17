@@ -41,7 +41,7 @@ echo "Setting up Python environment..."
 if [ ! -d "$INSTALL_DIR/venv" ]; then
     python3 -m venv "$INSTALL_DIR/venv"
 fi
-"$INSTALL_DIR/venv/bin/pip install fastapi uvicorn pydantic requests
+"$INSTALL_DIR/venv/bin/pip" install fastapi uvicorn pydantic requests
 
 # 5. Config Generation Logic
 mkdir -p "$INSTALL_DIR/ssl_cert"
