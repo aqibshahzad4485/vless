@@ -100,70 +100,6 @@ if [ -n "$DOMAIN" ]; then echo "$DOMAIN" > "$INSTALL_DIR/server_domain.txt"; fi
 # 6. Generate Xray Config
 echo "Generating Xray config..."
 
-# Common Function to write config
-write_config() {
-    cat <<EOF > "$XRAY_CONFIG"
-{
-  "log": {
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": $VPN_PORT,
-      "protocol": "vless",
-      "settings": {
-        "clients": [],
-        "decryption": "none"
-      },
-      "streamSettings": $STREAM_SETTINGS,
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    },
-    {
-      "port": 10085,
-      "listen": "127.0.0.1",
-      "protocol": "dokodemo-door",
-      "settings": {
-        "address": "127.0.0.1"
-      },
-      "tag": "api"
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "settings": {}
-    },
-    {
-      "protocol": "blackhole",
-      "tag": "blocked"
-    }
-  ],
-  "stats": {},
-  "api": {
-    "tag": "api",
-    "services": [
-      "StatsService"
-    ]
-  },
-  "policy": {
-    "levels": {
-      "0": {
-        "statsUserUplink": true,
-        "statsUserDownlink": true
-      }
-    },
-    "system": {
-      "statsInboundUplink": true,
-      "statsInboundDownlink": true
-    }
-  }
-}
-EOF
-}
-
 VPN_PORT=${VPN_PORT:-443}
 
 if [ "$MODE" == "reality" ]; then
@@ -182,47 +118,89 @@ if [ "$MODE" == "reality" ]; then
     echo "$PBK" > "$INSTALL_DIR/reality_pub.txt"
     echo "$SID" > "$INSTALL_DIR/reality_shortid.txt"
     
-    STREAM_SETTINGS=$(cat <<EOF
-{
-    "network": "tcp",
-    "security": "reality",
-    "realitySettings": {
-        "show": false,
-        "dest": "www.google.com:443",
-        "xver": 0,
-        "serverNames": [
-            "www.google.com",
-            "google.com"
+    # Generate Base Config with jq using REALITY
+    jq -n --arg port "$VPN_PORT" --arg pk "$PK" --arg sid "$SID" \
+    '{
+        log: {loglevel: "warning"},
+        inbounds: [
+            {
+                port: ($port|tonumber),
+                protocol: "vless",
+                settings: {clients: [], decryption: "none"},
+                streamSettings: {
+                    network: "tcp",
+                    security: "reality",
+                    realitySettings: {
+                        show: false,
+                        dest: "www.google.com:443",
+                        xver: 0,
+                        serverNames: ["www.google.com", "google.com"],
+                        privateKey: $pk,
+                        shortIds: [$sid]
+                    }
+                },
+                sniffing: {enabled: true, destOverride: ["http", "tls"]}
+            },
+            {
+                port: 10085,
+                listen: "127.0.0.1",
+                protocol: "dokodemo-door",
+                settings: {address: "127.0.0.1"},
+                tag: "api"
+            }
         ],
-        "privateKey": "$PK",
-        "shortIds": [
-            "$SID"
-        ]
-    }
-}
-EOF
-)
-    write_config
+        outbounds: [
+            {protocol: "freedom", settings: {}},
+            {protocol: "blackhole", tag: "blocked"}
+        ],
+        stats: {},
+        api: {tag: "api", services: ["StatsService"]},
+        policy: {
+            levels: {"0": {statsUserUplink: true, statsUserDownlink: true}},
+            system: {statsInboundUplink: true, statsInboundDownlink: true}
+        }
+    }' > "$XRAY_CONFIG"
 
 elif [ "$MODE" == "tls" ]; then
     echo "Configuring TLS..."
     
-    STREAM_SETTINGS=$(cat <<EOF
-{
-    "network": "tcp",
-    "security": "tls",
-    "tlsSettings": {
-        "certificates": [
+    # Generate Base Config with jq using TLS
+    jq -n --arg port "$VPN_PORT" --arg cert "$CERT_FULLCHAIN" --arg key "$CERT_KEY" \
+    '{
+        log: {loglevel: "warning"},
+        inbounds: [
             {
-                "certificateFile": "$CERT_FULLCHAIN",
-                "keyFile": "$CERT_KEY"
+                port: ($port|tonumber),
+                protocol: "vless",
+                settings: {clients: [], decryption: "none"},
+                streamSettings: {
+                    network: "tcp",
+                    security: "tls",
+                    tlsSettings: {
+                        certificates: [{certificateFile: $cert, keyFile: $key}]
+                    }
+                },
+                sniffing: {enabled: true, destOverride: ["http", "tls"]}
+            },
+            {
+                port: 10085,
+                listen: "127.0.0.1",
+                protocol: "dokodemo-door",
+                settings: {address: "127.0.0.1"},
+                tag: "api"
             }
-        ]
-    }
-}
-EOF
-)
-    write_config
+        ],
+        outbounds: [
+            {protocol: "freedom", settings: {}},
+            {protocol: "blackhole", tag: "blocked"}
+        ],
+        stats: {},
+        api: {tag: "api", services: ["StatsService"]},
+        policy: {
+            levels: {"0": {statsUserUplink: true, statsUserDownlink: true}},
+            system: {statsInboundUplink: true, statsInboundDownlink: true}
+        }
+    }' > "$XRAY_CONFIG"
 fi
 
 # 7. Generate API Key if missing
